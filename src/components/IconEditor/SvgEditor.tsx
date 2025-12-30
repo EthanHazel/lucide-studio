@@ -230,6 +230,15 @@ const SvgEditor = ({
           // check if there is a point nearby
           for (let i = 0; i < scopedPaths.length; i++) {
             const scopedPath = scopedPaths[i];
+            // don't snap to paths in selection
+            if (
+              selected.some(
+                ({ c }) =>
+                  c.id === scopedPath.c.id && c.idx === scopedPath.c.idx,
+              )
+            ) {
+              continue;
+            }
             if (
               (i !== currentPathIndex || snapTargetKey !== "prev") &&
               getDistance(movedAbsolute, scopedPath.prev) < 0.75
