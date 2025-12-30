@@ -561,7 +561,8 @@ const SnapViolations = ({
 
   const intersections: [Point, Point | undefined][] = [];
 
-  const points = paths.flatMap(
+  const points = paths.flatMap((path) => [path.prev, path.next]);
+  const endPoints = paths.flatMap(
     ({ prev, next, c }, idx, arr) =>
       [
         c.id !== arr[idx - 1]?.c.id && [prev, next],
@@ -570,18 +571,21 @@ const SnapViolations = ({
   );
   const arcs = paths.filter(({ c }) => c.type === 512);
 
-  for (let i = 0; i < points.length; i++) {
+  for (let i = 0; i < endPoints.length; i++) {
     for (let j = 0; j < arcs.length; j++) {
       const { circle } = arcs[j];
       if (
         circle &&
-        ((isDistanceSmaller(points[i][0], circle, circle.r + 1) &&
-          !isDistanceSmaller(points[i][0], circle, circle.r + 0.01)) ||
-          (!isDistanceSmaller(points[i][0], circle, circle.r - 1) &&
-            isDistanceSmaller(points[i][0], circle, circle.r - 0.01)))
+        ((isDistanceSmaller(endPoints[i][0], circle, circle.r + 1) &&
+          !isDistanceSmaller(endPoints[i][0], circle, circle.r + 0.01)) ||
+          (!isDistanceSmaller(endPoints[i][0], circle, circle.r - 1) &&
+            isDistanceSmaller(endPoints[i][0], circle, circle.r - 0.01)))
       ) {
         let deg =
-          ((Math.atan2(points[i][0].y - circle.y, points[i][0].x - circle.x) *
+          ((Math.atan2(
+            endPoints[i][0].y - circle.y,
+            endPoints[i][0].x - circle.x,
+          ) *
             180) /
             Math.PI) %
           360;
@@ -590,10 +594,10 @@ const SnapViolations = ({
           y: circle.y + circle.r * Math.sin((deg * Math.PI) / 180),
         };
         if (
-          !isDistanceSmaller(points[i][1], projectedPoint, 0.5) &&
+          !isDistanceSmaller(endPoints[i][1], projectedPoint, 0.5) &&
           isDegOnArc(deg, arcs[j])
         ) {
-          intersections.push([points[i][0], undefined]);
+          intersections.push([endPoints[i][0], undefined]);
         }
       }
     }
@@ -603,16 +607,19 @@ const SnapViolations = ({
       const dy = next.y - prev.y;
       const lengthSq = dx * dx + dy * dy;
       const t =
-        ((points[i][0].x - prev.x) * dx + (points[i][0].y - prev.y) * dy) /
+        ((endPoints[i][0].x - prev.x) * dx +
+          (endPoints[i][0].y - prev.y) * dy) /
         lengthSq;
       if (t < 0 || t > 1) continue; // Outside the line segment
       const projection = { x: prev.x + t * dx, y: prev.y + t * dy };
       if (
-        isDistanceSmaller(points[i][0], projection, 1) &&
-        !isDistanceSmaller(points[i][0], projection, 0.01) &&
-        !isDistanceSmaller(points[i][1], projection, 1)
+        isDistanceSmaller(endPoints[i][0], projection, 1) &&
+        !isDistanceSmaller(endPoints[i][0], projection, 0.01) &&
+        !isDistanceSmaller(endPoints[i][1], projection, 1) &&
+        points.filter((point) => isDistanceSmaller(point, endPoints[i][0], 1))
+          .length <= 1
       ) {
-        intersections.push([points[i][0], undefined]);
+        intersections.push([endPoints[i][0], undefined]);
       }
     }
   }
@@ -660,7 +667,8 @@ const SnapViolations = ({
       // move start if close to line
       if (
         isDistanceSmaller(p3, { x, y }, 0.5) &&
-        lines[j].c.id !== lines[j - 1]?.c?.id
+        lines[j].c.id !== lines[j - 1]?.c?.id &&
+        points.filter((point) => isDistanceSmaller(point, p3, 0.1)).length <= 1
       ) {
         intersections.push([p3, { x, y }]);
       }
@@ -668,7 +676,8 @@ const SnapViolations = ({
       // move end if close to line
       if (
         isDistanceSmaller(p4, { x, y }, 0.5) &&
-        lines[j].c.id !== lines[j + 1]?.c?.id
+        lines[j].c.id !== lines[j + 1]?.c?.id &&
+        points.filter((point) => isDistanceSmaller(point, p4, 0.1)).length <= 1
       ) {
         intersections.push([p4, { x, y }]);
       }

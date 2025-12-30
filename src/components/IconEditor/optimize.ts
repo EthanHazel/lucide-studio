@@ -1141,7 +1141,7 @@ function getLineIntersection(
 
 const snapLinesToIntersection = (svg: string) => {
   const data = parseSync(svg);
-  const { lines } = getLinesAndPoints(data.children);
+  const { lines, points } = getLinesAndPoints(data.children);
 
   for (let i = 0; i < lines.length; i++) {
     for (let j = 0; j < lines.length; j++) {
@@ -1185,7 +1185,8 @@ const snapLinesToIntersection = (svg: string) => {
 
       if (
         isDistanceSmaller(p3, { x, y }, 0.5) &&
-        lines[j].id !== lines[j - 1]?.id
+        lines[j].id !== lines[j - 1]?.id &&
+        points.filter((point) => isDistanceSmaller(point, p3, 0.1)).length === 1
       ) {
         const command = commander(data.children[lines[j].id].attributes.d);
         command.segments[0] = ["M", x, y];
@@ -1194,7 +1195,8 @@ const snapLinesToIntersection = (svg: string) => {
 
       if (
         isDistanceSmaller(p4, { x, y }, 0.5) &&
-        lines[j].id !== lines[j + 1]?.id
+        lines[j].id !== lines[j + 1]?.id &&
+        points.filter((point) => isDistanceSmaller(point, p4, 0.1)).length === 1
       ) {
         const command = commander(data.children[lines[j].id].attributes.d);
         command.segments[command.segments.length - 1].splice(1, 2, x, y);
