@@ -415,6 +415,7 @@ const SvgEditor = ({
               "svg-editor-circle": "circle",
               "svg-editor-cp1": "cp1",
               "svg-editor-cp2": "cp2",
+              "svg-editor-radius": "prev",
               "svg-preview-bounding-box-label": "bounds",
             } as const
           )[dragTargetRef.current.type],
@@ -511,6 +512,109 @@ const SvgEditor = ({
               }
               break;
             }
+            case "svg-editor-radius": {
+              if (i !== targetI) break;
+              if (
+                movedPath.circle &&
+                scopedPath.circle &&
+                movedPath.circle.tangentIntersection &&
+                scopedPath.circle.tangentIntersection
+              ) {
+                const { prev, next } = scopedPath;
+                const tangent = scopedPath.circle.tangentIntersection;
+                const vA = { x: prev.x - tangent.x, y: prev.y - tangent.y };
+                const vB = { x: next.x - tangent.x, y: next.y - tangent.y };
+                const magA = Math.hypot(vA.x, vA.y);
+                const magB = Math.hypot(vB.x, vB.y);
+                const bisector = {
+                  x: vA.x / magA + vB.x / magB,
+                  y: vA.y / magA + vB.y / magB,
+                };
+                const magBis = Math.hypot(bisector.x, bisector.y);
+                const normBisector = {
+                  x: bisector.x / magBis,
+                  y: bisector.y / magBis,
+                };
+                const mouse = {
+                  x: scopedPath.circle.x + movedDelta.x,
+                  y: scopedPath.circle.y + movedDelta.y,
+                };
+                const mouseDelta = {
+                  x: mouse.x - tangent.x,
+                  y: mouse.y - tangent.y,
+                };
+                const projLen =
+                  mouseDelta.x * normBisector.x + mouseDelta.y * normBisector.y;
+                const rawCenter = {
+                  x: tangent.x + normBisector.x * projLen,
+                  y: tangent.y + normBisector.y * projLen,
+                };
+                function distanceToLine(pt: Point, a: Point, b: Point) {
+                  const num = Math.abs(
+                    (b.y - a.y) * pt.x -
+                      (b.x - a.x) * pt.y +
+                      b.x * a.y -
+                      b.y * a.x,
+                  );
+                  const denom = Math.hypot(b.y - a.y, b.x - a.x);
+                  return denom === 0 ? 0 : num / denom;
+                }
+                const r1 = distanceToLine(rawCenter, tangent, prev);
+                const r2 = distanceToLine(rawCenter, tangent, next);
+                const rawRadius = Math.max(Math.min(r1, r2), 0.5);
+                const snappedRadius = Math.round(rawRadius * 2) / 2;
+                const dot = (vA.x * vB.x + vA.y * vB.y) / (magA * magB);
+                const angle = Math.acos(Math.max(-1, Math.min(1, dot)));
+                const snappedDistance = snappedRadius / Math.sin(angle / 2);
+                const snappedCenter = {
+                  x: tangent.x + normBisector.x * snappedDistance,
+                  y: tangent.y + normBisector.y * snappedDistance,
+                };
+                movedPath.circle.x = snappedCenter.x;
+                movedPath.circle.y = snappedCenter.y;
+                movedPath.circle.r = round(snappedRadius, 3);
+                function getTangentsOnCircle(
+                  center: Point,
+                  tangent: Point,
+                  r: number,
+                ): [Point, Point] {
+                  const vx = tangent.x - center.x;
+                  const vy = tangent.y - center.y;
+                  const d = Math.hypot(vx, vy);
+                  if (d <= r) {
+                    // In case degenerate, return duplicate points
+                    return [tangent, tangent];
+                  }
+                  const theta = Math.atan2(vy, vx);
+                  const alpha = Math.acos(r / d);
+                  const t1 = {
+                    x: center.x + r * Math.cos(theta + alpha),
+                    y: center.y + r * Math.sin(theta + alpha),
+                  };
+                  const t2 = {
+                    x: center.x + r * Math.cos(theta - alpha),
+                    y: center.y + r * Math.sin(theta - alpha),
+                  };
+                  return [t1, t2];
+                }
+                const [tanPt1, tanPt2] = getTangentsOnCircle(
+                  snappedCenter,
+                  tangent,
+                  snappedRadius,
+                );
+                if (
+                  Math.hypot(tanPt1.x - prev.x, tanPt1.y - prev.y) <
+                  Math.hypot(tanPt2.x - prev.x, tanPt2.y - prev.y)
+                ) {
+                  movedPath.prev = tanPt1;
+                  movedPath.next = tanPt2;
+                } else {
+                  movedPath.prev = tanPt2;
+                  movedPath.next = tanPt1;
+                }
+              }
+              break;
+            }
           }
 
           const n = scopedPaths[i].d.split(" ");
@@ -521,6 +625,10 @@ const SvgEditor = ({
           if (movedPath.cp2) {
             n[5] = round(movedPath.cp2.x, 3) + "";
             n[6] = round(movedPath.cp2.y, 3) + "";
+          }
+          if (movedPath.circle) {
+            n[3] = "A" + round(movedPath.circle.r, 3);
+            n[4] = round(movedPath.circle.r, 3) + "";
           }
           n[1] = round(movedPath.prev.x, 3) + "";
           n[2] = round(movedPath.prev.y, 3) + "";
@@ -646,7 +754,7 @@ const SvgEditor = ({
           {paths.map(({ d, c, next, prev, circle, cp1, cp2 }, i) => (
             <React.Fragment key={i}>
               <path
-                className={`svg-editor-path svg-editor-segment-${c.id}-${c.idx}`}
+                className={`svg-editor-${circle ? "circle" : "path"} svg-editor-segment-${c.id}-${c.idx}`}
                 d={d}
               />
               <path
@@ -660,7 +768,7 @@ const SvgEditor = ({
               />
               {circle && (
                 <path
-                  className={`svg-editor-circle svg-editor-segment-${c.id}-${c.idx}`}
+                  className={`svg-editor-${circle.tangentIntersection ? "radius" : "circle"} svg-editor-segment-${c.id}-${c.idx}`}
                   strokeWidth={1.5}
                   d={`M${circle.x} ${circle.y}h.01`}
                 />

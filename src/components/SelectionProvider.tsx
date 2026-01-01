@@ -16,6 +16,7 @@ export type Selection = {
     | "svg-editor-circle"
     | "svg-editor-cp1"
     | "svg-editor-cp2"
+    | "svg-editor-radius"
     | "svg-preview-bounding-box-label";
 } & Path;
 
